@@ -1,0 +1,3 @@
+platform,company_name,published_at,media_type,post_text,hashtags,likes,comments,shares
+linkedin,Example ERP Integrator,2026-02-10T09:20:00+00:00,image,"Manual approvals slow growth. We helped a distributor automate purchase workflows in Odoo and reduce cycle time by 38%. Book a demo.","odoo|erp|businessautomation",142,13,8
+facebook,Example ERP Integrator,2026-02-09T15:05:00+00:00,video,"Cloud migration tip: start with one mission-critical process and baseline your KPIs before cutover. Learn more.","cloudstrategy|digitaltransformation",94,6,4

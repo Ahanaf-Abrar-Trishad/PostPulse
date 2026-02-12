@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "socialintel"
+version = "0.1.0"
+description = "Compliant social intelligence pipeline for LinkedIn and Facebook"
+requires-python = ">=3.11"
+readme = "README.md"
+dependencies = [
+  "apscheduler==3.10.4",
+  "beautifulsoup4==4.12.3",
+  "fastapi==0.115.6",
+  "httpx==0.28.1",
+  "lxml==5.3.0",
+  "numpy==2.2.1",
+  "openai==1.59.6",
+  "openpyxl==3.1.5",
+  "pandas==2.2.3",
+  "playwright==1.49.1",
+  "psycopg[binary]==3.2.4",
+  "pydantic==2.10.4",
+  "pydantic-settings==2.7.0",
+  "pyyaml==6.0.2",
+  "scikit-learn==1.6.0",
+  "sqlalchemy==2.0.36",
+  "typer==0.15.1",
+  "uvicorn==0.34.0",
+]
+
+[project.scripts]
+socialintel = "app.main:cli"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-q"

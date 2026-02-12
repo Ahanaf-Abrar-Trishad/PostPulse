@@ -1,0 +1,16 @@
+[
+  {
+    "platform": "linkedin",
+    "content": "ERP upgrades fail when teams map software before outcomes. Start by selecting one revenue-critical workflow, align owners, and define baseline KPIs. Your roadmap will get faster approvals and cleaner adoption. Book a discovery call.",
+    "hashtags": ["erp", "digitaltransformation", "businessautomation", "odoo"],
+    "cta": "Book a discovery call",
+    "similarity_score": 0.34
+  },
+  {
+    "platform": "facebook",
+    "content": "If your cloud project still feels expensive, your migration sequence might be the issue. Prioritize the process with the biggest delay cost first, then scale with measured wins. Want a practical plan for your team? Talk to our consultants.",
+    "hashtags": ["cloudstrategy", "erp", "sme", "automation"],
+    "cta": "Talk to our consultants",
+    "similarity_score": 0.28
+  }
+]

@@ -1,0 +1,81 @@
+environment: local
+
+discovery:
+  keywords:
+    - erp implementation services
+    - odoo consulting
+    - custom software development
+    - cloud solutions provider
+    - business automation
+    - digital transformation consultant
+  max_candidates_per_keyword: 20
+  max_monitored_companies: 50
+
+companies:
+  - name: "<Company Name>"
+    website: "https://example.com"
+    linkedin_url: "https://www.linkedin.com/company/example/"
+    facebook_url: "https://www.facebook.com/example"
+    active: true
+
+scrape:
+  backfill_days: 90
+  lookback_hours_on_incremental: 4
+  default_platforms: [linkedin, facebook]
+  include_playwright_fallback: true
+  user_agent: socialintel-bot/0.1 (+compliant-public-collection)
+  navigation_timeout_seconds: 30
+
+rate_limit:
+  linkedin:
+    requests_per_minute: 25
+    jitter_min_seconds: 0.5
+    jitter_max_seconds: 1.8
+    retry_max_attempts: 4
+    retry_base_seconds: 1.0
+    circuit_breaker_threshold: 5
+    circuit_breaker_cooldown_seconds: 120
+  facebook:
+    requests_per_minute: 30
+    jitter_min_seconds: 0.4
+    jitter_max_seconds: 1.5
+    retry_max_attempts: 4
+    retry_base_seconds: 1.0
+    circuit_breaker_threshold: 5
+    circuit_breaker_cooldown_seconds: 120
+  fallback:
+    requests_per_minute: 10
+    jitter_min_seconds: 1.0
+    jitter_max_seconds: 2.5
+    retry_max_attempts: 3
+    retry_base_seconds: 1.2
+    circuit_breaker_threshold: 4
+    circuit_breaker_cooldown_seconds: 180
+
+generation:
+  default_count: 12
+  min_themes: 4
+  max_similarity_threshold: 0.82
+  default_language: en
+  style: B2B thought leadership
+  linkedin_ratio: 0.5
+
+scheduler:
+  timezone: UTC
+  discover_cron: "0 1 * * *"
+  scrape_cron: "0 2 * * *"
+  analyze_cron: "0 3 * * *"
+  generate_cron: "30 3 * * *"
+
+export:
+  default_formats: [csv, json, xlsx]
+  output_dir: exports
+
+web_ui:
+  host: 127.0.0.1
+  port: 8080
+  editable_config_path: config/config.yaml
+
+notifications:
+  webhook_enabled: true
+  webhook_timeout_seconds: 10
