@@ -11,7 +11,7 @@ def test_execute_with_retry_succeeds_after_failures():
             jitter_min_seconds=0,
             jitter_max_seconds=0,
             retry_max_attempts=3,
-            retry_base_seconds=0.001,
+            retry_base_seconds=0.1,
             circuit_breaker_threshold=10,
             circuit_breaker_cooldown_seconds=1,
         )
@@ -24,6 +24,6 @@ def test_execute_with_retry_succeeds_after_failures():
             raise RuntimeError("transient")
         return "ok"
 
-    result = execute_with_retry(op, limiter, attempts=3, base_seconds=0.001)
+    result = execute_with_retry(op, limiter, attempts=3, base_seconds=0.1)
     assert result == "ok"
     assert state["attempt"] == 3

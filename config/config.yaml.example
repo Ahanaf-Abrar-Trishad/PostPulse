@@ -10,6 +10,8 @@ discovery:
     - digital transformation consultant
   max_candidates_per_keyword: 20
   max_monitored_companies: 50
+  auto_promote_enabled: true
+  auto_promote_min_confidence: 0.85
 
 companies:
   - name: "<Company Name>"
@@ -25,6 +27,7 @@ scrape:
   lookback_hours_on_incremental: 4
   default_platforms: [linkedin, facebook]
   include_playwright_fallback: true
+  allow_fallback_without_platform_id: true
   user_agent: socialintel-bot/0.1 (+compliant-public-collection)
   navigation_timeout_seconds: 30
 

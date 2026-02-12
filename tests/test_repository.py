@@ -8,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.db.models import Base, CompanyCandidate, CompanyPlatformAccount
 from app.db.repository import Repository
+from app.scrapers.base import CompanyCandidate as CandidateDTO
 from app.scrapers.base import NormalizedPost
 
 
@@ -83,6 +84,35 @@ def test_candidate_activation_and_promotion():
         account = session.query(CompanyPlatformAccount).filter_by(company_id=company_id, platform="linkedin").one()
         assert account.platform_company_id == "999"
         assert repo.count_active_companies() == 1
+
+
+def test_upsert_candidate_returns_created_flag_and_auto_promotable():
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(bind=engine)
+    Session = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
+    with Session() as session:
+        repo = Repository(session)
+        candidate = CandidateDTO(
+            platform="facebook",
+            name="Acme Cloud",
+            profile_url="https://www.facebook.com/acme",
+            platform_company_id="fb-999",
+            confidence=0.9,
+            source_keyword="cloud",
+            metadata={"source": "test"},
+        )
+        candidate_id_1, created_1 = repo.upsert_company_candidate(candidate)
+        assert created_1 is True
+
+        candidate.platform_company_id = "fb-1000"
+        candidate_id_2, created_2 = repo.upsert_company_candidate(candidate)
+        assert created_2 is False
+        assert candidate_id_1 == candidate_id_2
+
+        candidate_row = repo.get_candidate(candidate_id_1)
+        assert candidate_row is not None
+        assert Repository.is_candidate_auto_promotable(candidate_row, min_confidence=0.85) is True
+        assert Repository.is_candidate_auto_promotable(candidate_row, min_confidence=0.95) is False
 
 
 def test_analysis_run_and_generated_posts():

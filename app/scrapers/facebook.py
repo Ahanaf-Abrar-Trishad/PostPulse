@@ -157,9 +157,15 @@ class FacebookCollector(BaseCollector):
             created_raw = item.get("created_time")
             if not created_raw:
                 continue
-            published_at = datetime.fromisoformat(created_raw.replace("Z", "+00:00")).astimezone(
-                timezone.utc
-            )
+            published_at = self._parse_created_time(created_raw)
+            if published_at is None:
+                logger.warning(
+                    "Skipping Facebook post with unparseable created_time. company=%s post_id=%s created_time=%s",
+                    company.name,
+                    item.get("id"),
+                    created_raw,
+                )
+                continue
             if published_at < since or published_at > until:
                 continue
             text = item.get("message", "")
@@ -222,3 +228,14 @@ class FacebookCollector(BaseCollector):
         if len(kinds) == 1:
             return kinds.pop()
         return "mixed"
+
+    @staticmethod
+    def _parse_created_time(created_raw: str) -> datetime | None:
+        try:
+            return datetime.fromisoformat(created_raw.replace("Z", "+00:00")).astimezone(timezone.utc)
+        except ValueError:
+            pass
+        try:
+            return datetime.strptime(created_raw, "%Y-%m-%dT%H:%M:%S%z").astimezone(timezone.utc)
+        except ValueError:
+            return None

@@ -41,6 +41,8 @@ class DiscoveryConfig(BaseModel):
     keywords: list[str] = Field(default_factory=list)
     max_candidates_per_keyword: int = Field(default=20, ge=1, le=100)
     max_monitored_companies: int = Field(default=50, ge=1, le=500)
+    auto_promote_enabled: bool = True
+    auto_promote_min_confidence: float = Field(default=0.85, ge=0.0, le=1.0)
 
 
 class ScrapeConfig(BaseModel):
@@ -48,6 +50,7 @@ class ScrapeConfig(BaseModel):
     lookback_hours_on_incremental: int = Field(default=4, ge=0, le=48)
     default_platforms: list[str] = Field(default_factory=lambda: ["linkedin", "facebook"])
     include_playwright_fallback: bool = True
+    allow_fallback_without_platform_id: bool = True
     user_agent: str = "socialintel-bot/0.1 (+compliant-public-collection)"
     navigation_timeout_seconds: int = Field(default=30, ge=5, le=120)
 

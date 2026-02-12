@@ -88,6 +88,13 @@ Company config supports optional platform IDs for direct scraping:
 - `linkedin_company_id`
 - `facebook_page_id`
 
+Discovery config supports hybrid auto-promotion:
+- `auto_promote_enabled`
+- `auto_promote_min_confidence`
+
+Scrape config supports fallback collection without platform IDs:
+- `allow_fallback_without_platform_id`
+
 7. Run daily pipeline:
 
 ```bash
@@ -110,6 +117,10 @@ python -m app.main run-daily
 - `socialintel ui --host 127.0.0.1 --port 8080`
 
 If `socialintel` is not available, use `python -m app.main`.
+
+Candidate lifecycle semantics:
+- `candidates-activate` marks candidate as reviewed/approved only.
+- `candidates-promote` creates/updates scrape targets (companies/platform accounts).
 
 ## Web UI
 
@@ -155,6 +166,7 @@ tests/
 - Playwright issues: run `playwright install chromium`.
 - Empty discovery results: token may not have required API permissions; use curated company list in config.
 - `skipped_missing_platform_id > 0` in scrape output: set `linkedin_company_id` / `facebook_page_id` in config or promote discovered candidates.
+- `fallback_without_platform_id_used`: number of missing-ID accounts collected through public fallback.
 
 ## License
 

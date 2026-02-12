@@ -51,6 +51,39 @@ def test_facebook_fetch_posts(settings):
 
 
 @respx.mock
+def test_facebook_fetch_skips_invalid_date(settings):
+    collector = FacebookCollector(settings, PlatformLimiter(settings.config.rate_limit.facebook))
+    respx.get("https://graph.facebook.com/v19.0/111/posts").mock(
+        return_value=Response(
+            200,
+            json={
+                "data": [
+                    {
+                        "id": "111_bad",
+                        "message": "Bad date row",
+                        "created_time": "not-a-date",
+                        "attachments": {"data": []},
+                    }
+                ]
+            },
+        )
+    )
+    company = CompanyRef(
+        id=uuid4(),
+        name="Test Co",
+        profile_url="https://facebook.com/testco",
+        platform="facebook",
+        platform_company_id="111",
+    )
+    posts = collector.fetch_posts(
+        company=company,
+        since=datetime(2026, 2, 1, tzinfo=timezone.utc),
+        until=datetime(2026, 2, 12, tzinfo=timezone.utc),
+    )
+    assert posts == []
+
+
+@respx.mock
 def test_linkedin_fetch_posts(settings):
     collector = LinkedInCollector(settings, PlatformLimiter(settings.config.rate_limit.linkedin))
     route = respx.get("https://api.linkedin.com/v2/ugcPosts").mock(

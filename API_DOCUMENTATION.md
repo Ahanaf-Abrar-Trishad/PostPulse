@@ -37,10 +37,11 @@ Fields include:
 
 Key methods:
 - `sync_companies_from_config(...)`
-- `upsert_company_candidate(...)`
+- `upsert_company_candidate(...) -> tuple[candidate_id, created_new_record]`
 - `list_candidates(platform, active_only, limit)`
 - `activate_candidate(candidate_id)`
 - `promote_candidate_to_company(candidate_id)`
+- `is_candidate_auto_promotable(candidate, min_confidence)`
 - `count_active_companies()`
 - `get_active_company_refs(...)`
 - `create_scrape_run(...)`, `finish_scrape_run(...)`
@@ -80,10 +81,18 @@ Key methods:
 Scrape payload now includes:
 - `skipped_missing_platform_id`
 - `fallback_skipped_no_date`
+- `fallback_without_platform_id_used`
+- `fallback_cards_seen`
 
 Discovery payload now includes:
+- `new_candidates`
+- `updated_candidates`
 - `candidates_promoted`
 - `ignored_due_to_monitor_limit`
+
+Activation vs promotion:
+- `activate_candidate`: review/approval marker only.
+- `promote_candidate`: creates/updates company scrape target and platform account.
 
 ## Web API (`app/ui/server.py`)
 

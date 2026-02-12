@@ -60,6 +60,9 @@ class Repository:
                 profile_url=item.get("facebook_url"),
                 platform_company_id=item.get("facebook_page_id"),
             )
+        # Keep config-sync behavior deterministic for callers that read immediately after sync
+        # while using sessions with autoflush disabled.
+        self.session.flush()
         return created_or_updated
 
     def _ensure_platform_account(
@@ -95,7 +98,7 @@ class Repository:
             if platform_company_id:
                 account.platform_company_id = platform_company_id
 
-    def upsert_company_candidate(self, candidate: CandidateDTO) -> UUID:
+    def upsert_company_candidate(self, candidate: CandidateDTO) -> tuple[UUID, bool]:
         existing = self.session.scalar(
             select(CompanyCandidate).where(
                 CompanyCandidate.platform == candidate.platform,
@@ -106,7 +109,11 @@ class Repository:
             existing.confidence = max(existing.confidence, candidate.confidence)
             existing.source_keyword = candidate.source_keyword
             existing.metadata_json = candidate.metadata
-            return existing.id
+            if candidate.platform_company_id and not existing.platform_company_id:
+                existing.platform_company_id = candidate.platform_company_id
+            if candidate.name:
+                existing.name = candidate.name
+            return existing.id, False
         record = CompanyCandidate(
             platform=candidate.platform,
             name=candidate.name,
@@ -119,7 +126,7 @@ class Repository:
         )
         self.session.add(record)
         self.session.flush()
-        return record.id
+        return record.id, True
 
     def get_candidate(self, candidate_id: UUID) -> CompanyCandidate | None:
         return self.session.get(CompanyCandidate, candidate_id)
@@ -147,6 +154,17 @@ class Repository:
         if candidate is None:
             raise ValueError(f"Candidate not found: {candidate_id}")
         candidate.active = True
+
+    @staticmethod
+    def is_candidate_auto_promotable(
+        candidate: CompanyCandidate,
+        min_confidence: float,
+    ) -> bool:
+        return bool(
+            candidate.platform_company_id
+            and (candidate.profile_url or "").strip()
+            and candidate.confidence >= min_confidence
+        )
 
     def promote_candidate_to_company(self, candidate_id: UUID) -> UUID:
         candidate = self.session.get(CompanyCandidate, candidate_id)

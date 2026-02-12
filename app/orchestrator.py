@@ -55,17 +55,21 @@ class Orchestrator:
         if not keywords:
             logger.warning("No discovery keywords configured; skipping discovery")
             return {
-                "inserted": 0,
+                "new_candidates": 0,
+                "updated_candidates": 0,
                 "platforms": [],
                 "candidates_promoted": 0,
                 "ignored_due_to_monitor_limit": 0,
             }
 
-        inserted = 0
+        new_candidates = 0
+        updated_candidates = 0
         candidates_promoted = 0
         ignored_due_to_monitor_limit = 0
         platforms_used: list[str] = []
         max_monitored = self.settings.config.discovery.max_monitored_companies
+        auto_promote_enabled = self.settings.config.discovery.auto_promote_enabled
+        auto_promote_min_confidence = self.settings.config.discovery.auto_promote_min_confidence
         with session_scope(self.session_factory) as session:
             repo = Repository(session)
             active_company_count = repo.count_active_companies()
@@ -78,12 +82,35 @@ class Orchestrator:
                     logger.warning("Discovery skipped for platform=%s error=%s", collector.platform, exc)
                     continue
                 for candidate in candidates:
-                    repo.upsert_company_candidate(candidate)
-                    inserted += 1
+                    candidate_id, created = repo.upsert_company_candidate(candidate)
+                    if created:
+                        new_candidates += 1
+                    else:
+                        updated_candidates += 1
+
+                    if not auto_promote_enabled:
+                        continue
+
+                    candidate_record = repo.get_candidate(candidate_id)
+                    if candidate_record is None or candidate_record.active:
+                        continue
+
+                    if not repo.is_candidate_auto_promotable(
+                        candidate_record,
+                        min_confidence=auto_promote_min_confidence,
+                    ):
+                        continue
+
                     if active_company_count >= max_monitored:
                         ignored_due_to_monitor_limit += 1
+                        continue
+
+                    repo.promote_candidate_to_company(candidate_id)
+                    candidates_promoted += 1
+                    active_company_count = repo.count_active_companies()
         payload = {
-            "inserted": inserted,
+            "new_candidates": new_candidates,
+            "updated_candidates": updated_candidates,
             "platforms": platforms_used,
             "keywords": keywords,
             "candidates_promoted": candidates_promoted,
@@ -102,8 +129,10 @@ class Orchestrator:
         failures = 0
         processed = 0
         fallback_used = 0
+        fallback_without_platform_id_used = 0
         skipped_missing_platform_id = 0
         fallback_skipped_no_date = 0
+        fallback_cards_seen = 0
         with session_scope(self.session_factory) as session:
             repo = Repository(session)
             run = repo.create_scrape_run(job_type="scrape", platform=platform)
@@ -117,39 +146,78 @@ class Orchestrator:
                 if collector is None:
                     failures += 1
                     continue
-                if not company.platform_company_id:
-                    skipped_missing_platform_id += 1
-                    logger.warning(
-                        "Skipping company due to missing platform ID. company=%s platform=%s",
-                        company.name,
-                        company.platform,
-                    )
-                    continue
-                try:
-                    collector.authenticate()
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning("Collector auth failed platform=%s error=%s", company.platform, exc)
-                    failures += 1
-                    continue
-                company_since = since or self._compute_default_since(repo, company.id, company.platform)
-                try:
-                    raw_posts = collector.fetch_posts(company, company_since, until)
-                except Exception as exc:  # noqa: BLE001
-                    logger.error("Primary fetch failed company=%s platform=%s error=%s", company.name, company.platform, exc)
-                    raw_posts = []
-                    failures += 1
 
-                if not raw_posts and self.settings.config.scrape.include_playwright_fallback:
-                    fallback = self.fallback_collector.fetch_posts(company, company_since, until)
-                    fallback_skipped_no_date += self.fallback_collector.last_skipped_no_date
-                    if fallback:
-                        fallback_used += 1
-                        raw_posts = fallback
-                        normalized = [self.fallback_collector.normalize(item, company) for item in raw_posts]
+                company_since = since or self._compute_default_since(repo, company.id, company.platform)
+                raw_posts = []
+                normalized = []
+
+                if not company.platform_company_id:
+                    allow_direct_fallback = (
+                        self.settings.config.scrape.allow_fallback_without_platform_id
+                        and self.settings.config.scrape.include_playwright_fallback
+                        and bool((company.profile_url or "").strip())
+                    )
+                    if allow_direct_fallback:
+                        fallback = self.fallback_collector.fetch_posts(company, company_since, until)
+                        fallback_skipped_no_date += self.fallback_collector.last_skipped_no_date
+                        fallback_cards_seen += self.fallback_collector.last_cards_seen
+                        if fallback:
+                            fallback_used += 1
+                            fallback_without_platform_id_used += 1
+                            raw_posts = fallback
+                            normalized = [
+                                self.fallback_collector.normalize(item, company) for item in raw_posts
+                            ]
+                        else:
+                            skipped_missing_platform_id += 1
+                            logger.warning(
+                                "Missing platform ID and fallback returned no public posts. company=%s platform=%s",
+                                company.name,
+                                company.platform,
+                            )
+                            continue
                     else:
-                        normalized = []
+                        skipped_missing_platform_id += 1
+                        logger.warning(
+                            "Skipping company due to missing platform ID. company=%s platform=%s",
+                            company.name,
+                            company.platform,
+                        )
+                        continue
                 else:
-                    normalized = [collector.normalize(item, company) for item in raw_posts]
+                    try:
+                        collector.authenticate()
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("Collector auth failed platform=%s error=%s", company.platform, exc)
+                        failures += 1
+                        continue
+
+                    try:
+                        raw_posts = collector.fetch_posts(company, company_since, until)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.error(
+                            "Primary fetch failed company=%s platform=%s error=%s",
+                            company.name,
+                            company.platform,
+                            exc,
+                        )
+                        raw_posts = []
+                        failures += 1
+
+                    if not raw_posts and self.settings.config.scrape.include_playwright_fallback:
+                        fallback = self.fallback_collector.fetch_posts(company, company_since, until)
+                        fallback_skipped_no_date += self.fallback_collector.last_skipped_no_date
+                        fallback_cards_seen += self.fallback_collector.last_cards_seen
+                        if fallback:
+                            fallback_used += 1
+                            raw_posts = fallback
+                            normalized = [
+                                self.fallback_collector.normalize(item, company) for item in raw_posts
+                            ]
+                        else:
+                            normalized = []
+                    else:
+                        normalized = [collector.normalize(item, company) for item in raw_posts]
 
                 newest: datetime | None = None
                 for raw_item, norm_item in zip(raw_posts, normalized):
@@ -170,8 +238,10 @@ class Orchestrator:
                 "posts_processed": processed,
                 "failures": failures,
                 "fallback_used": fallback_used,
+                "fallback_without_platform_id_used": fallback_without_platform_id_used,
                 "skipped_missing_platform_id": skipped_missing_platform_id,
                 "fallback_skipped_no_date": fallback_skipped_no_date,
+                "fallback_cards_seen": fallback_cards_seen,
             }
             repo.finish_scrape_run(
                 run_id=run_id,
@@ -185,8 +255,10 @@ class Orchestrator:
             "posts_processed": processed,
             "failures": failures,
             "fallback_used": fallback_used,
+            "fallback_without_platform_id_used": fallback_without_platform_id_used,
             "skipped_missing_platform_id": skipped_missing_platform_id,
             "fallback_skipped_no_date": fallback_skipped_no_date,
+            "fallback_cards_seen": fallback_cards_seen,
         }
         self._notify("scrape.completed", payload)
         return payload
@@ -213,7 +285,6 @@ class Orchestrator:
         }
 
     def activate_candidate(self, candidate_id: UUID) -> dict[str, Any]:
-        max_monitored = self.settings.config.discovery.max_monitored_companies
         with session_scope(self.session_factory) as session:
             repo = Repository(session)
             candidate = repo.get_candidate(candidate_id)
@@ -223,20 +294,13 @@ class Orchestrator:
                 return {
                     "status": "already_active",
                     "candidate_id": str(candidate_id),
-                    "ignored_due_to_monitor_limit": 0,
-                }
-            active_count = repo.count_active_companies()
-            if active_count >= max_monitored:
-                return {
-                    "status": "ignored",
-                    "candidate_id": str(candidate_id),
-                    "ignored_due_to_monitor_limit": 1,
+                    "note": "approved_only_not_promoted",
                 }
             repo.activate_candidate(candidate_id)
         return {
             "status": "activated",
             "candidate_id": str(candidate_id),
-            "ignored_due_to_monitor_limit": 0,
+            "note": "approved_only_not_promoted",
         }
 
     def promote_candidate(self, candidate_id: UUID) -> dict[str, Any]:

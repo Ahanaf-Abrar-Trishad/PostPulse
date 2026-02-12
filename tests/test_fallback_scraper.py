@@ -26,6 +26,7 @@ def test_parse_public_html(settings):
     posts = collector._parse_public_html(company, html, since, until)
     assert len(posts) == 2
     assert posts[0].media_type in {"image", "video", "text", "mixed"}
+    assert collector.last_cards_seen == 2
 
 
 def test_parse_public_html_skips_missing_dates(settings):
@@ -51,3 +52,4 @@ def test_parse_public_html_skips_missing_dates(settings):
     posts = collector._parse_public_html(company, html, since, until)
     assert len(posts) == 1
     assert collector.last_skipped_no_date == 1
+    assert collector.last_cards_seen == 2

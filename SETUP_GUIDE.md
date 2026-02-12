@@ -55,6 +55,11 @@ Optional refresh support:
 - Add keywords under `discovery.keywords`.
 - Add target companies under `companies`.
 - Optionally set `linkedin_company_id` and `facebook_page_id` per company for direct scraping without discovery promotion.
+- Optional hybrid discovery promotion controls:
+  - `discovery.auto_promote_enabled`
+  - `discovery.auto_promote_min_confidence`
+- Optional scrape control:
+  - `scrape.allow_fallback_without_platform_id`
 - Adjust scheduling and rate limits if needed.
 
 ### Candidate lifecycle commands
@@ -64,6 +69,9 @@ python -m app.main candidates-list --platform all
 python -m app.main candidates-activate --candidate-id <uuid>
 python -m app.main candidates-promote --candidate-id <uuid>
 ```
+
+`candidates-activate` is review-only.  
+`candidates-promote` makes a candidate an actual scrape target.
 
 ## 3) Database Initialization
 

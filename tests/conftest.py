@@ -15,6 +15,8 @@ discovery:
   keywords: ["erp implementation"]
   max_candidates_per_keyword: 10
   max_monitored_companies: 20
+  auto_promote_enabled: true
+  auto_promote_min_confidence: 0.85
 companies:
   - name: Test Co
     website: https://example.com
@@ -28,6 +30,7 @@ scrape:
   lookback_hours_on_incremental: 2
   default_platforms: [linkedin, facebook]
   include_playwright_fallback: true
+  allow_fallback_without_platform_id: true
   user_agent: test-agent
   navigation_timeout_seconds: 30
 rate_limit:
@@ -36,7 +39,7 @@ rate_limit:
     jitter_min_seconds: 0
     jitter_max_seconds: 0
     retry_max_attempts: 2
-    retry_base_seconds: 0.01
+    retry_base_seconds: 0.1
     circuit_breaker_threshold: 5
     circuit_breaker_cooldown_seconds: 30
   facebook:
@@ -44,7 +47,7 @@ rate_limit:
     jitter_min_seconds: 0
     jitter_max_seconds: 0
     retry_max_attempts: 2
-    retry_base_seconds: 0.01
+    retry_base_seconds: 0.1
     circuit_breaker_threshold: 5
     circuit_breaker_cooldown_seconds: 30
   fallback:
@@ -52,7 +55,7 @@ rate_limit:
     jitter_min_seconds: 0
     jitter_max_seconds: 0
     retry_max_attempts: 2
-    retry_base_seconds: 0.01
+    retry_base_seconds: 0.1
     circuit_breaker_threshold: 5
     circuit_breaker_cooldown_seconds: 30
 generation:

@@ -36,6 +36,7 @@ class PlaywrightFallbackCollector:
         self.user_agent = settings.config.scrape.user_agent
         self.timeout_ms = settings.config.scrape.navigation_timeout_seconds * 1000
         self.last_skipped_no_date = 0
+        self.last_cards_seen = 0
 
     def allowed_by_robots(self, url: str) -> bool:
         parsed = urlparse(url)
@@ -51,6 +52,7 @@ class PlaywrightFallbackCollector:
 
     def fetch_posts(self, company: CompanyRef, since: datetime, until: datetime) -> list[RawPost]:
         self.last_skipped_no_date = 0
+        self.last_cards_seen = 0
         if not self.allowed_by_robots(company.profile_url):
             logger.warning("Robots denied fallback for %s", company.profile_url)
             return []
@@ -90,6 +92,7 @@ class PlaywrightFallbackCollector:
     ) -> list[RawPost]:
         soup = BeautifulSoup(html, "lxml")
         cards = soup.select("article, div.feed-shared-update-v2, div[data-pagelet^='FeedUnit']")
+        self.last_cards_seen = len(cards)
         posts: list[RawPost] = []
         skipped_no_date = 0
         for idx, node in enumerate(cards):
