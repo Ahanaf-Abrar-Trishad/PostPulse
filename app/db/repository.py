@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
 import pandas as pd
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.logging import get_logger
@@ -51,16 +52,28 @@ class Repository:
                 company=company,
                 platform="linkedin",
                 profile_url=item.get("linkedin_url"),
+                platform_company_id=item.get("linkedin_company_id"),
             )
             self._ensure_platform_account(
                 company=company,
                 platform="facebook",
                 profile_url=item.get("facebook_url"),
+                platform_company_id=item.get("facebook_page_id"),
             )
         return created_or_updated
 
-    def _ensure_platform_account(self, company: Company, platform: str, profile_url: str | None) -> None:
-        if not profile_url:
+    def _ensure_platform_account(
+        self,
+        company: Company,
+        platform: str,
+        profile_url: str | None,
+        platform_company_id: str | None = None,
+    ) -> None:
+        effective_profile_url = (
+            (profile_url or "").strip()
+            or self._default_profile_url(platform, platform_company_id)
+        )
+        if not effective_profile_url and not platform_company_id:
             return
         account = self.session.scalar(
             select(CompanyPlatformAccount).where(
@@ -72,11 +85,15 @@ class Repository:
             account = CompanyPlatformAccount(
                 company_id=company.id,
                 platform=platform,
-                profile_url=profile_url,
+                profile_url=effective_profile_url,
+                platform_company_id=platform_company_id,
             )
             self.session.add(account)
         else:
-            account.profile_url = profile_url
+            if effective_profile_url:
+                account.profile_url = effective_profile_url
+            if platform_company_id:
+                account.platform_company_id = platform_company_id
 
     def upsert_company_candidate(self, candidate: CandidateDTO) -> UUID:
         existing = self.session.scalar(
@@ -104,6 +121,55 @@ class Repository:
         self.session.flush()
         return record.id
 
+    def get_candidate(self, candidate_id: UUID) -> CompanyCandidate | None:
+        return self.session.get(CompanyCandidate, candidate_id)
+
+    def list_candidates(
+        self,
+        platform: str | None = None,
+        active_only: bool = False,
+        limit: int = 500,
+    ) -> list[CompanyCandidate]:
+        stmt = select(CompanyCandidate).order_by(
+            CompanyCandidate.active.desc(),
+            CompanyCandidate.confidence.desc(),
+            CompanyCandidate.created_at.desc(),
+        )
+        if platform and platform != "all":
+            stmt = stmt.where(CompanyCandidate.platform == platform)
+        if active_only:
+            stmt = stmt.where(CompanyCandidate.active.is_(True))
+        stmt = stmt.limit(max(1, min(limit, 2000)))
+        return list(self.session.scalars(stmt).all())
+
+    def activate_candidate(self, candidate_id: UUID) -> None:
+        candidate = self.session.get(CompanyCandidate, candidate_id)
+        if candidate is None:
+            raise ValueError(f"Candidate not found: {candidate_id}")
+        candidate.active = True
+
+    def promote_candidate_to_company(self, candidate_id: UUID) -> UUID:
+        candidate = self.session.get(CompanyCandidate, candidate_id)
+        if candidate is None:
+            raise ValueError(f"Candidate not found: {candidate_id}")
+        company = self._find_company_by_normalized_name(candidate.name)
+        if company is None:
+            company = Company(name=candidate.name, active=True)
+            self.session.add(company)
+            self.session.flush()
+        else:
+            company.active = True
+
+        self._ensure_platform_account(
+            company=company,
+            platform=candidate.platform,
+            profile_url=candidate.profile_url,
+            platform_company_id=candidate.platform_company_id,
+        )
+        candidate.active = True
+        self.session.flush()
+        return company.id
+
     def get_active_company_refs(self, platforms: list[str] | None = None) -> list[CompanyRef]:
         stmt = (
             select(CompanyPlatformAccount, Company)
@@ -125,6 +191,11 @@ class Repository:
                 )
             )
         return refs
+
+    def count_active_companies(self) -> int:
+        stmt = select(func.count(Company.id)).where(Company.active.is_(True))
+        value = self.session.scalar(stmt)
+        return int(value or 0)
 
     def create_scrape_run(self, job_type: str, platform: str = "all") -> ScrapeRun:
         run = ScrapeRun(job_type=job_type, platform=platform, status="running")
@@ -372,3 +443,30 @@ class Repository:
             for post in posts
         ]
         return pd.DataFrame(rows)
+
+    @staticmethod
+    def _normalize_company_name(name: str) -> str:
+        return re.sub(r"\s+", " ", (name or "").strip().lower())
+
+    def _find_company_by_normalized_name(self, name: str) -> Company | None:
+        normalized_target = self._normalize_company_name(name)
+        if not normalized_target:
+            return None
+        exact = self.session.scalar(select(Company).where(Company.name == name))
+        if exact is not None:
+            return exact
+        companies = self.session.scalars(select(Company)).all()
+        for company in companies:
+            if self._normalize_company_name(company.name) == normalized_target:
+                return company
+        return None
+
+    @staticmethod
+    def _default_profile_url(platform: str, platform_company_id: str | None) -> str:
+        if not platform_company_id:
+            return ""
+        if platform == "linkedin":
+            return f"https://www.linkedin.com/company/{platform_company_id}/"
+        if platform == "facebook":
+            return f"https://www.facebook.com/{platform_company_id}"
+        return ""

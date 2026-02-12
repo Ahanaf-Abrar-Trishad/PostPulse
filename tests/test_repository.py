@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from uuid import UUID
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.db.models import Base
+from app.db.models import Base, CompanyCandidate, CompanyPlatformAccount
 from app.db.repository import Repository
 from app.scrapers.base import NormalizedPost
 
@@ -22,12 +23,15 @@ def test_repository_upsert_post():
                     "name": "Test Co",
                     "website": "https://example.com",
                     "linkedin_url": "https://www.linkedin.com/company/testco/",
+                    "linkedin_company_id": "li-123",
                     "facebook_url": "https://www.facebook.com/testco",
+                    "facebook_page_id": "fb-456",
                     "active": True,
                 }
             ]
         )
         company_ref = repo.get_active_company_refs(platforms=["linkedin"])[0]
+        assert company_ref.platform_company_id == "li-123"
         post = NormalizedPost(
             platform="linkedin",
             platform_post_id="post-1",
@@ -50,6 +54,35 @@ def test_repository_upsert_post():
         assert first_id == second_id
         posts = repo.get_posts_for_analysis(window_days=365)
         assert len(posts) == 1
+
+
+def test_candidate_activation_and_promotion():
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(bind=engine)
+    Session = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
+    with Session() as session:
+        repo = Repository(session)
+        candidate = CompanyCandidate(
+            platform="linkedin",
+            name="Acme ERP",
+            profile_url="https://www.linkedin.com/company/acme-erp/",
+            platform_company_id="999",
+            confidence=0.8,
+            source_keyword="erp",
+            metadata_json={},
+            active=False,
+        )
+        session.add(candidate)
+        session.flush()
+
+        repo.activate_candidate(candidate.id)
+        assert candidate.active is True
+
+        company_id = repo.promote_candidate_to_company(candidate.id)
+        assert isinstance(company_id, UUID)
+        account = session.query(CompanyPlatformAccount).filter_by(company_id=company_id, platform="linkedin").one()
+        assert account.platform_company_id == "999"
+        assert repo.count_active_companies() == 1
 
 
 def test_analysis_run_and_generated_posts():

@@ -31,7 +31,9 @@ class CompanyConfig(BaseModel):
     name: str
     website: str | None = None
     linkedin_url: str | None = None
+    linkedin_company_id: str | None = None
     facebook_url: str | None = None
+    facebook_page_id: str | None = None
     active: bool = True
 
 

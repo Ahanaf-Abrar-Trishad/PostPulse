@@ -122,12 +122,18 @@ class ContentGeneratorService:
                 return content
         return self._generate_single(constrained_prompt)["content"].strip()
 
-    @staticmethod
-    def _platform_distribution(count: int, platforms: list[str]) -> dict[str, int]:
-        platforms = [platform.lower() for platform in platforms] or ["linkedin", "facebook"]
-        if len(platforms) == 1:
-            return {platforms[0]: count}
-        linkedin_count = int(round(count * 0.5))
+    def _platform_distribution(self, count: int, platforms: list[str]) -> dict[str, int]:
+        normalized = [platform.lower() for platform in platforms] or ["linkedin", "facebook"]
+        unique_platforms = list(dict.fromkeys(normalized))
+        supported = {"linkedin", "facebook"}
+        invalid = [item for item in unique_platforms if item not in supported]
+        if invalid:
+            raise ValueError(f"Unsupported platform(s): {', '.join(invalid)}")
+        if len(unique_platforms) == 1:
+            return {unique_platforms[0]: count}
+
+        ratio = self.settings.config.generation.linkedin_ratio
+        linkedin_count = int(round(count * ratio))
         linkedin_count = max(1, min(count - 1, linkedin_count))
         return {"linkedin": linkedin_count, "facebook": count - linkedin_count}
 

@@ -35,6 +35,7 @@ class PlaywrightFallbackCollector:
         self.limiter = limiter
         self.user_agent = settings.config.scrape.user_agent
         self.timeout_ms = settings.config.scrape.navigation_timeout_seconds * 1000
+        self.last_skipped_no_date = 0
 
     def allowed_by_robots(self, url: str) -> bool:
         parsed = urlparse(url)
@@ -49,6 +50,7 @@ class PlaywrightFallbackCollector:
             return False
 
     def fetch_posts(self, company: CompanyRef, since: datetime, until: datetime) -> list[RawPost]:
+        self.last_skipped_no_date = 0
         if not self.allowed_by_robots(company.profile_url):
             logger.warning("Robots denied fallback for %s", company.profile_url)
             return []
@@ -89,6 +91,7 @@ class PlaywrightFallbackCollector:
         soup = BeautifulSoup(html, "lxml")
         cards = soup.select("article, div.feed-shared-update-v2, div[data-pagelet^='FeedUnit']")
         posts: list[RawPost] = []
+        skipped_no_date = 0
         for idx, node in enumerate(cards):
             text = " ".join(chunk.strip() for chunk in node.stripped_strings)
             text = re.sub(r"\s+", " ", text).strip()
@@ -100,7 +103,10 @@ class PlaywrightFallbackCollector:
                 or (time_tag.get("datetime") if time_tag else None)
                 or " ".join(node.stripped_strings)
             )
-            published_at = self._extract_date(date_text) or datetime.now(timezone.utc)
+            published_at = self._extract_date(date_text)
+            if published_at is None:
+                skipped_no_date += 1
+                continue
             if published_at < since or published_at > until:
                 continue
             media_type = self._infer_media_type(node)
@@ -114,6 +120,7 @@ class PlaywrightFallbackCollector:
                     metadata={"source": "playwright_fallback"},
                 )
             )
+        self.last_skipped_no_date = skipped_no_date
         return posts
 
     @staticmethod

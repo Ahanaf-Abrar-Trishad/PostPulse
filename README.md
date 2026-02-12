@@ -84,6 +84,10 @@ Optional token refresh fields:
 python -m app.main init-db
 ```
 
+Company config supports optional platform IDs for direct scraping:
+- `linkedin_company_id`
+- `facebook_page_id`
+
 7. Run daily pipeline:
 
 ```bash
@@ -98,6 +102,9 @@ python -m app.main run-daily
 - `socialintel analyze --window-days 90`
 - `socialintel generate --count 12 --platform all`
 - `socialintel export --format csv --out exports/`
+- `socialintel candidates-list --platform all`
+- `socialintel candidates-activate --candidate-id <uuid>`
+- `socialintel candidates-promote --candidate-id <uuid>`
 - `socialintel run-daily`
 - `socialintel schedule`
 - `socialintel ui --host 127.0.0.1 --port 8080`
@@ -147,6 +154,7 @@ tests/
 - `relation does not exist`: run `init-db` after DB is reachable.
 - Playwright issues: run `playwright install chromium`.
 - Empty discovery results: token may not have required API permissions; use curated company list in config.
+- `skipped_missing_platform_id > 0` in scrape output: set `linkedin_company_id` / `facebook_page_id` in config or promote discovered candidates.
 
 ## License
 

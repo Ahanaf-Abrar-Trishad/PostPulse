@@ -54,12 +54,21 @@ class Orchestrator:
         keywords = keywords_override or self.settings.config.discovery.keywords
         if not keywords:
             logger.warning("No discovery keywords configured; skipping discovery")
-            return {"inserted": 0, "platforms": []}
+            return {
+                "inserted": 0,
+                "platforms": [],
+                "candidates_promoted": 0,
+                "ignored_due_to_monitor_limit": 0,
+            }
 
         inserted = 0
+        candidates_promoted = 0
+        ignored_due_to_monitor_limit = 0
         platforms_used: list[str] = []
+        max_monitored = self.settings.config.discovery.max_monitored_companies
         with session_scope(self.session_factory) as session:
             repo = Repository(session)
+            active_company_count = repo.count_active_companies()
             for collector in [self.linkedin_collector, self.facebook_collector]:
                 try:
                     collector.authenticate()
@@ -71,7 +80,15 @@ class Orchestrator:
                 for candidate in candidates:
                     repo.upsert_company_candidate(candidate)
                     inserted += 1
-        payload = {"inserted": inserted, "platforms": platforms_used, "keywords": keywords}
+                    if active_company_count >= max_monitored:
+                        ignored_due_to_monitor_limit += 1
+        payload = {
+            "inserted": inserted,
+            "platforms": platforms_used,
+            "keywords": keywords,
+            "candidates_promoted": candidates_promoted,
+            "ignored_due_to_monitor_limit": ignored_due_to_monitor_limit,
+        }
         self._notify("discover.completed", payload)
         return payload
 
@@ -85,6 +102,8 @@ class Orchestrator:
         failures = 0
         processed = 0
         fallback_used = 0
+        skipped_missing_platform_id = 0
+        fallback_skipped_no_date = 0
         with session_scope(self.session_factory) as session:
             repo = Repository(session)
             run = repo.create_scrape_run(job_type="scrape", platform=platform)
@@ -97,6 +116,14 @@ class Orchestrator:
                 collector = self._collector_for(company.platform)
                 if collector is None:
                     failures += 1
+                    continue
+                if not company.platform_company_id:
+                    skipped_missing_platform_id += 1
+                    logger.warning(
+                        "Skipping company due to missing platform ID. company=%s platform=%s",
+                        company.name,
+                        company.platform,
+                    )
                     continue
                 try:
                     collector.authenticate()
@@ -114,6 +141,7 @@ class Orchestrator:
 
                 if not raw_posts and self.settings.config.scrape.include_playwright_fallback:
                     fallback = self.fallback_collector.fetch_posts(company, company_since, until)
+                    fallback_skipped_no_date += self.fallback_collector.last_skipped_no_date
                     if fallback:
                         fallback_used += 1
                         raw_posts = fallback
@@ -132,15 +160,18 @@ class Orchestrator:
                 repo.update_watermark(company.id, company.platform, newest)
 
             status = "success"
-            if failures > 0 and processed > 0:
+            has_issues = failures > 0 or skipped_missing_platform_id > 0
+            if has_issues and processed > 0:
                 status = "partial_success"
-            elif failures > 0 and processed == 0:
+            elif has_issues and processed == 0:
                 status = "failed"
             details = {
                 "companies_processed": len(refs),
                 "posts_processed": processed,
                 "failures": failures,
                 "fallback_used": fallback_used,
+                "skipped_missing_platform_id": skipped_missing_platform_id,
+                "fallback_skipped_no_date": fallback_skipped_no_date,
             }
             repo.finish_scrape_run(
                 run_id=run_id,
@@ -154,9 +185,83 @@ class Orchestrator:
             "posts_processed": processed,
             "failures": failures,
             "fallback_used": fallback_used,
+            "skipped_missing_platform_id": skipped_missing_platform_id,
+            "fallback_skipped_no_date": fallback_skipped_no_date,
         }
         self._notify("scrape.completed", payload)
         return payload
+
+    def list_candidates(self, platform: str = "all", active_only: bool = False) -> dict[str, Any]:
+        with session_scope(self.session_factory) as session:
+            repo = Repository(session)
+            candidates = repo.list_candidates(platform=platform, active_only=active_only)
+        return {
+            "count": len(candidates),
+            "items": [
+                {
+                    "id": str(item.id),
+                    "platform": item.platform,
+                    "name": item.name,
+                    "profile_url": item.profile_url,
+                    "platform_company_id": item.platform_company_id,
+                    "confidence": item.confidence,
+                    "source_keyword": item.source_keyword,
+                    "active": item.active,
+                }
+                for item in candidates
+            ],
+        }
+
+    def activate_candidate(self, candidate_id: UUID) -> dict[str, Any]:
+        max_monitored = self.settings.config.discovery.max_monitored_companies
+        with session_scope(self.session_factory) as session:
+            repo = Repository(session)
+            candidate = repo.get_candidate(candidate_id)
+            if candidate is None:
+                raise ValueError(f"Candidate not found: {candidate_id}")
+            if candidate.active:
+                return {
+                    "status": "already_active",
+                    "candidate_id": str(candidate_id),
+                    "ignored_due_to_monitor_limit": 0,
+                }
+            active_count = repo.count_active_companies()
+            if active_count >= max_monitored:
+                return {
+                    "status": "ignored",
+                    "candidate_id": str(candidate_id),
+                    "ignored_due_to_monitor_limit": 1,
+                }
+            repo.activate_candidate(candidate_id)
+        return {
+            "status": "activated",
+            "candidate_id": str(candidate_id),
+            "ignored_due_to_monitor_limit": 0,
+        }
+
+    def promote_candidate(self, candidate_id: UUID) -> dict[str, Any]:
+        max_monitored = self.settings.config.discovery.max_monitored_companies
+        with session_scope(self.session_factory) as session:
+            repo = Repository(session)
+            candidate = repo.get_candidate(candidate_id)
+            if candidate is None:
+                raise ValueError(f"Candidate not found: {candidate_id}")
+            active_count = repo.count_active_companies()
+            if active_count >= max_monitored:
+                return {
+                    "status": "ignored",
+                    "candidate_id": str(candidate_id),
+                    "ignored_due_to_monitor_limit": 1,
+                    "candidates_promoted": 0,
+                }
+            company_id = repo.promote_candidate_to_company(candidate_id)
+        return {
+            "status": "promoted",
+            "candidate_id": str(candidate_id),
+            "company_id": str(company_id),
+            "ignored_due_to_monitor_limit": 0,
+            "candidates_promoted": 1,
+        }
 
     def analyze(self, window_days: int | None = None) -> dict[str, Any]:
         window_days = window_days or self.settings.config.scrape.backfill_days

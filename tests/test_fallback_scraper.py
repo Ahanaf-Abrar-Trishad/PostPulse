@@ -26,3 +26,28 @@ def test_parse_public_html(settings):
     posts = collector._parse_public_html(company, html, since, until)
     assert len(posts) == 2
     assert posts[0].media_type in {"image", "video", "text", "mixed"}
+
+
+def test_parse_public_html_skips_missing_dates(settings):
+    collector = PlaywrightFallbackCollector(
+        settings=settings,
+        limiter=PlatformLimiter(settings.config.rate_limit.fallback),
+    )
+    html = """
+    <html><body>
+      <article><p>Post without date #ERP</p></article>
+      <article><time datetime="2026-02-10T12:00:00"></time><p>Dated post #Cloud</p></article>
+    </body></html>
+    """
+    company = CompanyRef(
+        id=uuid4(),
+        name="Test Co",
+        profile_url="https://example.com/company/test",
+        platform="linkedin",
+        platform_company_id=None,
+    )
+    since = datetime(2026, 2, 1, tzinfo=timezone.utc)
+    until = datetime(2026, 2, 12, tzinfo=timezone.utc)
+    posts = collector._parse_public_html(company, html, since, until)
+    assert len(posts) == 1
+    assert collector.last_skipped_no_date == 1

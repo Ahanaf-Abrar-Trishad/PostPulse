@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated
+from uuid import UUID
 
 import typer
 import uvicorn
@@ -61,7 +62,10 @@ def scrape_command(
     config_path: Annotated[str, typer.Option("--config")] = "config/config.yaml",
 ) -> None:
     _, _, orchestrator = _bootstrap(config_path)
-    since_dt = datetime.fromisoformat(since).replace(tzinfo=timezone.utc) if since else None
+    since_dt: datetime | None = None
+    if since:
+        parsed = datetime.fromisoformat(since)
+        since_dt = parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
     result = orchestrator.scrape_posts(platform=platform, since=since_dt)
     typer.echo(json.dumps(result, indent=2))
 
@@ -140,6 +144,37 @@ def seed_companies(
         settings.config.companies = payload.get("companies", settings.config.companies)
     count = orchestrator.bootstrap_companies()
     typer.echo(json.dumps({"seeded": count}, indent=2))
+
+
+@cli.command("candidates-list")
+def candidates_list_command(
+    platform: Annotated[str, typer.Option("--platform", help="linkedin|facebook|all")] = "all",
+    active_only: Annotated[bool, typer.Option("--active-only")] = False,
+    config_path: Annotated[str, typer.Option("--config")] = "config/config.yaml",
+) -> None:
+    _, _, orchestrator = _bootstrap(config_path)
+    result = orchestrator.list_candidates(platform=platform, active_only=active_only)
+    typer.echo(json.dumps(result, indent=2))
+
+
+@cli.command("candidates-activate")
+def candidates_activate_command(
+    candidate_id: Annotated[str, typer.Option("--candidate-id")],
+    config_path: Annotated[str, typer.Option("--config")] = "config/config.yaml",
+) -> None:
+    _, _, orchestrator = _bootstrap(config_path)
+    result = orchestrator.activate_candidate(UUID(candidate_id))
+    typer.echo(json.dumps(result, indent=2))
+
+
+@cli.command("candidates-promote")
+def candidates_promote_command(
+    candidate_id: Annotated[str, typer.Option("--candidate-id")],
+    config_path: Annotated[str, typer.Option("--config")] = "config/config.yaml",
+) -> None:
+    _, _, orchestrator = _bootstrap(config_path)
+    result = orchestrator.promote_candidate(UUID(candidate_id))
+    typer.echo(json.dumps(result, indent=2))
 
 
 if __name__ == "__main__":

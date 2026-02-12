@@ -15,7 +15,9 @@ companies:
   - name: "<Company Name>"
     website: "https://example.com"
     linkedin_url: "https://www.linkedin.com/company/example/"
+    linkedin_company_id: "<linkedin_org_id_optional>"
     facebook_url: "https://www.facebook.com/example"
+    facebook_page_id: "<facebook_page_id_optional>"
     active: true
 
 scrape:

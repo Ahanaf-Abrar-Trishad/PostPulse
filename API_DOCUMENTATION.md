@@ -38,6 +38,10 @@ Fields include:
 Key methods:
 - `sync_companies_from_config(...)`
 - `upsert_company_candidate(...)`
+- `list_candidates(platform, active_only, limit)`
+- `activate_candidate(candidate_id)`
+- `promote_candidate_to_company(candidate_id)`
+- `count_active_companies()`
 - `get_active_company_refs(...)`
 - `create_scrape_run(...)`, `finish_scrape_run(...)`
 - `upsert_post(...)`
@@ -50,6 +54,9 @@ Key methods:
 - `bootstrap_companies()`
 - `discover_candidates(keywords_override=None)`
 - `scrape_posts(platform="all", since=None, until=None)`
+- `list_candidates(platform="all", active_only=False)`
+- `activate_candidate(candidate_id)`
+- `promote_candidate(candidate_id)`
 - `analyze(window_days=90)`
 - `generate_content(count=12, platforms=["linkedin","facebook"])`
 - `export_data(format_name, out_dir=None)`
@@ -63,9 +70,20 @@ Key methods:
 - `analyze`
 - `generate`
 - `export`
+- `candidates-list`
+- `candidates-activate`
+- `candidates-promote`
 - `run-daily`
 - `schedule`
 - `ui`
+
+Scrape payload now includes:
+- `skipped_missing_platform_id`
+- `fallback_skipped_no_date`
+
+Discovery payload now includes:
+- `candidates_promoted`
+- `ignored_due_to_monitor_limit`
 
 ## Web API (`app/ui/server.py`)
 

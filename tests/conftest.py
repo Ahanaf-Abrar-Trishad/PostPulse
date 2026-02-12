@@ -19,7 +19,9 @@ companies:
   - name: Test Co
     website: https://example.com
     linkedin_url: https://www.linkedin.com/company/testco/
+    linkedin_company_id: "12345"
     facebook_url: https://www.facebook.com/testco
+    facebook_page_id: "67890"
     active: true
 scrape:
   backfill_days: 90

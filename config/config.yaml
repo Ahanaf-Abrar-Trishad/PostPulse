@@ -15,7 +15,9 @@ companies:
   - name: Example ERP Integrator
     website: https://example-erp.com
     linkedin_url: https://www.linkedin.com/company/example-erp-integrator/
+    linkedin_company_id: ""
     facebook_url: https://www.facebook.com/exampleerp
+    facebook_page_id: ""
     active: true
 
 scrape:

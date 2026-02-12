@@ -44,6 +44,7 @@ def test_orchestrator_end_to_end(settings, monkeypatch, tmp_path: Path):
 
     scrape = orch.scrape_posts(platform="all")
     assert scrape["posts_processed"] >= 1
+    assert scrape["skipped_missing_platform_id"] == 0
 
     analysis = orch.analyze(window_days=90)
     assert analysis["status"] == "success"
