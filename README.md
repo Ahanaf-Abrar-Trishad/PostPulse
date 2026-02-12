@@ -1,4 +1,4 @@
-# SocialIntel Pipeline (Local v1)
+# PostPulse (Local v1.2)
 
 Compliant social intelligence pipeline for collecting public company posts from LinkedIn and Facebook, analyzing engagement patterns, and generating original B2B social content.
 
@@ -22,6 +22,24 @@ This project is designed for public content and authorized API access only. It d
 - CLI and minimal local FastAPI UI.
 - CSV/JSON/XLSX export.
 - Webhook notifications and structured logs.
+
+## What's New in v1.2
+
+- Hybrid candidate promotion in discovery:
+  - auto-promote only when confidence and platform ID thresholds are met
+  - keep manual approval and manual promotion commands
+- Discovery payload correctness:
+  - `new_candidates`
+  - `updated_candidates`
+  - `candidates_promoted`
+  - `ignored_due_to_monitor_limit`
+- Missing platform ID handling:
+  - optional fallback collection from public profile URLs when enabled
+  - new scrape counter: `fallback_without_platform_id_used`
+- Fallback timestamp safety:
+  - cards without parseable publish dates are skipped (no fabricated `now()` timestamp)
+- Facebook date parsing hardening:
+  - supports common Graph `created_time` variants and safely skips invalid rows
 
 ## Architecture
 
@@ -68,6 +86,13 @@ cp .env.example .env
 cp config/config.yaml.example config/config.yaml
 ```
 
+Windows PowerShell alternative:
+
+```powershell
+Copy-Item .env.example .env
+Copy-Item config/config.yaml.example config/config.yaml
+```
+
 5. Set required values in `.env`:
    - `DATABASE_URL`
    - `LINKEDIN_ACCESS_TOKEN`
@@ -101,6 +126,15 @@ Scrape config supports fallback collection without platform IDs:
 python -m app.main run-daily
 ```
 
+Optional first-run candidate workflow:
+
+```bash
+python -m app.main discover --keywords-file config/keywords.txt
+python -m app.main candidates-list --platform all
+python -m app.main candidates-activate --candidate-id <uuid>
+python -m app.main candidates-promote --candidate-id <uuid>
+```
+
 ## CLI Commands
 
 - `socialintel init-db`
@@ -121,6 +155,18 @@ If `socialintel` is not available, use `python -m app.main`.
 Candidate lifecycle semantics:
 - `candidates-activate` marks candidate as reviewed/approved only.
 - `candidates-promote` creates/updates scrape targets (companies/platform accounts).
+
+Discover output semantics:
+- `new_candidates`: first-time candidate records created.
+- `updated_candidates`: existing candidates updated.
+- `candidates_promoted`: candidates promoted to active scrape targets.
+- `ignored_due_to_monitor_limit`: promotion attempts blocked by `max_monitored_companies`.
+
+Scrape output semantics:
+- `fallback_without_platform_id_used`: missing-ID accounts scraped via public fallback.
+- `skipped_missing_platform_id`: missing-ID accounts skipped due to policy/config/insufficient URL.
+- `fallback_skipped_no_date`: fallback cards skipped because date was missing/unparseable.
+- `fallback_cards_seen`: diagnostic count of fallback cards scanned.
 
 ## Web UI
 
@@ -167,6 +213,8 @@ tests/
 - Empty discovery results: token may not have required API permissions; use curated company list in config.
 - `skipped_missing_platform_id > 0` in scrape output: set `linkedin_company_id` / `facebook_page_id` in config or promote discovered candidates.
 - `fallback_without_platform_id_used`: number of missing-ID accounts collected through public fallback.
+- `status=partial_success`: some posts processed, but at least one failure or skip occurred.
+- `status=failed`: no posts processed and at least one failure or skip occurred.
 
 ## License
 
